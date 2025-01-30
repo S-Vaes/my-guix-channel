@@ -1,4 +1,4 @@
-(define-module (packages lisp-xyz papyrus)
+(define-module (my-channel papyrus)
   #:use-module (guix packages)
   #:use-module (guix git-download)
   #:use-module (guix build-system asdf)
