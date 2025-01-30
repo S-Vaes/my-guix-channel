@@ -36,5 +36,3 @@ Common Lisp with Markdown, Org mode, and POD documentation formats.")
 
 (define-public ecl-papyrus
   (sbcl-package->ecl-package sbcl-papyrus))
-
-sbcl-papyrus
