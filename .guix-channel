@@ -1,5 +1,6 @@
 (channel
  (version 0)
+ (keyring-reference "keyring")
  (url "https://github.com/S-Vaes/my-guix-channel")
  (dependencies
   (channel
