@@ -12,13 +12,13 @@
     (version "0.1.0")  ; You may want to adjust this version
     (source
      (origin
-       (method git-fetch)
-       (uri (git-reference
-             (url "https://github.com/tani/papyrus")
-             (commit "fb9ca79")))  ; Latest commit from the repository
-       (file-name (git-file-name "cl-papyrus" version))
-       (sha256
-        (base32 "1x5wmqjpxx1m7rvbspbv78h3him37n6klblp192yl0faz5v5p8x5"))))
+      (method git-fetch)
+      (uri (git-reference
+            (url "https://github.com/tani/papyrus")
+            (commit "fb9ca79")))
+      (file-name (git-file-name "cl-papyrus" version))
+      (sha256
+       (base32 "1x5wmqjpxx1m7rvbspbv78h3him37n6klblp192yl0faz5v5p8x5"))))
     (build-system asdf-build-system/sbcl)
     (inputs
      (list sbcl-named-readtables))

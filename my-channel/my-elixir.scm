@@ -1,6 +1,11 @@
 (define-module (my-channel my-elixir)
   #:use-module (guix packages)
+  #:use-module (guix build-system gnu)
+  #:use-module (guix utils)
+  #:use-module (guix gexp)
   #:use-module (guix git-download)
+  #:use-module (gnu packages elixir)
+  #:use-module (gnu packages erlang)
   #:use-module (gnu packages elixir-xyz)
   #:use-module (guix build-system mix)
   #:use-module ((guix licenses) #:prefix license:))
@@ -14,10 +19,10 @@
        (method git-fetch)
        (uri (git-reference
              (url "https://github.com/elixir-lsp/elixir_sense")
-             (commit "aec3b4ac7bf6731ee6e9506f2783a542820d4422")))
+             (commit "cad0a81791fef1661ca47fe6be271808a704b0be")))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "1a6rky71x3ihkw0sf93y6fan78swiqcz1nfad9parv7vba2vn2vv"))))  ; Replace with actual hash
+        (base32 "1a6rky71x3ihkw0sf93y6fan78swiqcz1nfad9parv7vba2vn2vv"))))
     (build-system mix-build-system)
     (arguments (list #:tests? #f))
     (synopsis "An API for Elixir projects that provides building blocks for code completion.")
@@ -65,27 +70,47 @@
    (home-page "https://github.com/elixir-lsp/erl2ex")
    (license license:expat)))
 
-(define-public elixir-path-glob-vendored
+(define-public elixir-erlex-vendored
  (package
-  (name "elixir-path-glob-vendored")
-  (version "1.0.0")
-  (source
-   (origin
-    (method git-fetch)
-    (uri (git-reference
-          (url "https://github.com/elixir-lsp/path_glob")
-          (commit "965350dc41def7be4a70a23904195c733a2ecc84")))
-    (file-name (git-file-name name version))
-    (sha256
-     (base32 "1jqbdnhsdjcamgzqi4y3lgk1xcj9bl0wi2agbzvsrm4pr45l97y2"))))
-  (build-system mix-build-system)
-  (propagated-inputs
+   (name "elixir-erlex-vendored")
+   (version "1.0.0")
+   (source
+    (origin
+      (method git-fetch)
+      (uri (git-reference
+            (url "https://github.com/elixir-lsp/erlex")
+            (commit "c0e448db27bcbb3f369861d13e3b0607ed37048d")))
+      (file-name (git-file-name name version))
+      (sha256
+       (base32 "1k4grhm99qfjmvj72imjvmnxr94mgyrpf01dc28i66gr3692was2"))))
+   (build-system mix-build-system)
+   (arguments (list #:tests? #f))
+   (synopsis "Converting Erlang style structs to Elixir style structs")
+   (description "Tool for converting Erlang style structs to Elixir style structs")
+   (home-page "https://github.com/elixir-lsp/erlex")
+   (license license:expat)))
+
+(define-public elixir-path-glob-vendored
+  (package
+   (name "elixir-path-glob-vendored")
+   (version "1.0.0")
+   (source
+    (origin
+     (method git-fetch)
+     (uri (git-reference
+           (url "https://github.com/elixir-lsp/path_glob")
+           (commit "965350dc41def7be4a70a23904195c733a2ecc84")))
+     (file-name (git-file-name name version))
+     (sha256
+      (base32 "1jqbdnhsdjcamgzqi4y3lgk1xcj9bl0wi2agbzvsrm4pr45l97y2"))))
+   (build-system mix-build-system)
+   (propagated-inputs
     (list elixir-nimble-parsec))
-  (arguments (list #:tests? #f))
-  (description "File path globbing for Elixir")
-  (synopsis "File path globbing for Elixir")
-  (home-page "https://github.com/elixir-lsp/path_glob")
-  (license license:expat)))
+   (arguments (list #:tests? #f))
+   (description "File path globbing for Elixir")
+   (synopsis "File path globbing for Elixir")
+   (home-page "https://github.com/elixir-lsp/path_glob")
+   (license license:expat)))
 
 (define-public elixir-ls
   (package
@@ -106,10 +131,64 @@
           elixir-jason-v
           elixir-erl2ex-vendored
           elixir-path-glob-vendored
-          elixir-dialyxir ))
-   (arguments (list #:tests? #f))
-   (synopsis "The language server for Elixir that just works.")
+          elixir-erlex-vendored
+          elixir-dialyxir))
+   (arguments
+    `(#:tests? #f
+      #:phases
+      (modify-phases %standard-phases
+        (add-before 'build 'setup-mix
+          (lambda _
+            (setenv "MIX_BUILD_ROOT" "_build")
+            (setenv "MIX_DEPS_PATH" "deps")
+            (setenv "MIX_ENV" "prod")))
+        (replace 'build
+          (lambda _
+            ;; First get deps
+            (invoke "mix" "deps.compile" "--no-deps-check")
+            ;; Then compile everything
+            (invoke "mix" "compile" "--no-deps-check")
+            ;; Finally create release
+            (invoke "mix" "elixir_ls.release")))
+        (replace 'install
+          (lambda* (#:key outputs #:allow-other-keys)
+            (let* ((out (assoc-ref outputs "out"))
+                   (bin (string-append out "/bin"))
+                   (lib (string-append out "/lib")))
+              (mkdir-p bin)
+              (mkdir-p lib)
+              (copy-recursively "release" lib)
+              (copy-file "release/language_server.sh"
+                        (string-append bin "/elixir-ls"))
+              (copy-file "release/debug_adapter.sh"
+                        (string-append bin "/elixir-debug-adapter"))
+              (chmod (string-append bin "/elixir-ls") #o755)
+              (chmod (string-append bin "/elixir-debug-adapter") #o755)
+              (substitute* (string-append bin "/elixir-ls")
+                (("exec \"\\$\\{dir\\}/launch.sh\"")
+                 (string-append "exec " lib "/launch.sh")))
+              (substitute* (string-append bin "/elixir-debug-adapter")
+                (("exec \"\\$\\{dir\\}/launch.sh\"")
+                 (string-append "exec " lib "/launch.sh")))
+              (substitute* (string-append lib "/launch.sh")
+                (("ERL_LIBS=\"\\$SCRIPTPATH:\\$ERL_LIBS\"")
+                 (string-append "ERL_LIBS=" lib ":\\$ERL_LIBS"))
+                (("exec elixir")
+                 "exec elixir")
+                (("echo \"\" \\| elixir")
+                 "echo \"\" | elixir"))
+              (substitute* (string-append lib "/exec.zsh")
+                (("exec elixir")
+                 "exec elixir"))
+              #t))))))
+   (synopsis "A frontend-independent IDE server for Elixir")
    (description
-    "Next LS is a developer tool to provide code intelligence for your text editor by implementing the Language Server Protocol. Still in heavy development, but early adopters are encouraged!")
+    "The Elixir Language Server provides a server that runs in the background,
+providing IDEs, editors, and other tools with information about Elixir Mix projects.
+It adheres to the Language Server Protocol, a standard for frontend-independent IDE
+support. Debugger integration is accomplished through the similar VS Code Debug
+Protocol.")
    (home-page "https://github.com/elixir-lsp/elixir-ls")
    (license license:expat)))
+
+elixir-ls
