@@ -9,7 +9,7 @@
 (define-public sbcl-alive-lsp
   (package
    (name "sbcl-alive-lsp")
-   (version "0.2.8")                  ; We'll need to determine a proper version
+   (version "0.2.11")                  ; We'll need to determine a proper version
    (source
     (origin
      (method git-fetch)
